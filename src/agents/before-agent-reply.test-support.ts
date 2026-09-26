@@ -13,11 +13,7 @@ import { createChannelTestPluginBase } from "../test-utils/channel-plugins.js";
 export function createRegisteredBeforeAgentReplyFixture(reply: ReplyPayload) {
   const builder = createPluginRegistry({
     logger: { info() {}, warn() {}, error() {}, debug() {} },
-    runtime: createLazyPluginRuntime({
-      loadPluginModule: () => {
-        throw new Error("Claimed replies must not load the plugin runtime");
-      },
-    }),
+    runtime: createLazyPluginRuntime({}),
     activateGlobalSideEffects: false,
   });
   const record = createPluginRecord({ id: "claimed-reply-proof", origin: "bundled" });

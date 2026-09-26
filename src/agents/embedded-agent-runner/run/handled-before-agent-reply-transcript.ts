@@ -11,7 +11,7 @@ import {
   resolveHandledBeforeAgentReplyTranscriptText,
 } from "../../../plugins/before-agent-reply.js";
 import { runAgentHarnessBeforeMessageWriteHook } from "../../harness/hook-helpers.js";
-import type { AgentRunSessionTarget } from "../../run-session-target.js";
+import type { AgentRunSessionTarget } from "../../run-session-target.types.js";
 import { buildAssistantMessage, buildUsageWithNoCost } from "../../stream-message-shared.js";
 import type { RunEmbeddedAgentInternalParams } from "./internal-params.js";
 
