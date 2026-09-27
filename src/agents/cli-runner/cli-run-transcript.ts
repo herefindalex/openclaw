@@ -1,4 +1,8 @@
-import { setReplyPayloadMetadata, type ReplyPayload } from "../../auto-reply/reply-payload.js";
+import {
+  isExplicitlySilentReplyPayload,
+  setReplyPayloadMetadata,
+  type ReplyPayload,
+} from "../../auto-reply/reply-payload.js";
 import { SILENT_REPLY_TOKEN } from "../../auto-reply/tokens.js";
 import { cloneEnvWithPlatformSemantics } from "../../config/config-env-vars.js";
 import { getCliHistoryWriter } from "../../config/sessions/cli-history-boundary.js";
@@ -247,7 +251,7 @@ export async function prepareCliHandledBeforeAgentReply(params: {
   params.assertCurrent();
   const finalText = params.reply?.text ?? SILENT_REPLY_TOKEN;
   const payloads = buildHandledBeforeAgentReplyPayloads(params.reply);
-  if (!params.reply) {
+  if (!params.reply || isExplicitlySilentReplyPayload(params.reply)) {
     for (const payload of payloads) {
       setReplyPayloadMetadata(payload, { assistantTranscriptOwned: true });
     }

@@ -55,13 +55,16 @@ export function registerCliClaimedReplyAuthorityTests(params: {
     runParams: Omit<RunCliAgentParams, "admittedRunContext">,
   ) => Promise<EmbeddedAgentRunResult>;
 }) {
-  it("keeps a silent cron hook claim out of the assistant transcript", async () => {
+  it.each([
+    { name: "absent reply", reply: undefined },
+    { name: "explicit silent reply", reply: { text: SILENT_REPLY_TOKEN } },
+  ])("keeps a $name cron hook claim out of the assistant transcript", async ({ reply }) => {
     const sessionTarget = await createClaimedReplySessionTarget(
       params.makeTempDir("openclaw-cli-before-agent-reply-silent-"),
       params.baseRunParams,
     );
     params.hasHooksMock.mockImplementation((hookName) => hookName === "before_agent_reply");
-    params.runBeforeAgentReplyMock.mockResolvedValue({ handled: true });
+    params.runBeforeAgentReplyMock.mockResolvedValue({ handled: true, reply });
     const result = await params.runCliAgent({
       ...params.baseRunParams,
       ...sessionTarget,

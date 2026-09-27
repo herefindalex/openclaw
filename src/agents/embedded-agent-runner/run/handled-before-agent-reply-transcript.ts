@@ -1,4 +1,8 @@
-import { setReplyPayloadMetadata, type ReplyPayload } from "../../../auto-reply/reply-payload.js";
+import {
+  isExplicitlySilentReplyPayload,
+  setReplyPayloadMetadata,
+  type ReplyPayload,
+} from "../../../auto-reply/reply-payload.js";
 import { SILENT_REPLY_TOKEN } from "../../../auto-reply/tokens.js";
 import type { PrepareAssistantTranscriptMessage } from "../../../config/sessions/transcript-assistant-delivery.js";
 import {
@@ -89,7 +93,7 @@ async function prepareEmbeddedHandledBeforeAgentReply(
   params.assertCurrent();
   const finalText = params.reply?.text ?? SILENT_REPLY_TOKEN;
   const payloads = buildHandledBeforeAgentReplyPayloads(params.reply);
-  if (!params.persist || !params.reply) {
+  if (!params.persist || !params.reply || isExplicitlySilentReplyPayload(params.reply)) {
     for (const payload of payloads) {
       setReplyPayloadMetadata(payload, { assistantTranscriptOwned: true });
     }

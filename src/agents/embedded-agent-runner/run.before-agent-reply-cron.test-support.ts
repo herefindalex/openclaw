@@ -198,14 +198,17 @@ describe("runEmbeddedAgent before_agent_reply seam", () => {
     }
   });
 
-  it("keeps a silent hook claim out of the assistant transcript", async () => {
+  it.each([
+    { name: "absent reply", reply: undefined },
+    { name: "explicit silent reply", reply: { text: SILENT_REPLY_TOKEN } },
+  ])("keeps a $name hook claim out of the assistant transcript", async ({ reply }) => {
     const session = await createSharedRunIntegrationSession();
     const { loadTranscriptEvents } = await import("../../config/sessions/session-accessor.js");
     try {
       mockedGlobalHookRunner.hasHooks.mockImplementation(
         (hookName: string) => hookName === "before_agent_reply",
       );
-      mockedGlobalHookRunner.runBeforeAgentReply.mockResolvedValue({ handled: true });
+      mockedGlobalHookRunner.runBeforeAgentReply.mockResolvedValue({ handled: true, reply });
       const result = await runEmbeddedAgent({ ...session.runParams, trigger: "user" });
       expect(result.payloads?.[0]?.text).toBe(SILENT_REPLY_TOKEN);
       expect(mockedRunEmbeddedAttempt).not.toHaveBeenCalled();
