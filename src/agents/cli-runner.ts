@@ -261,7 +261,6 @@ async function runCliAgentInternal(
     try {
       context = await prepareCliRunContext(runParams);
     } catch (error) {
-      runParams.assertCurrent?.();
       await settleCliPreparationError(error, runParams);
       throw error;
     }
