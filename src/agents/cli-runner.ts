@@ -205,9 +205,15 @@ async function runCliAgentInternal(
             }),
         });
   if (hookResult?.handled) {
+    const assertCurrent = () => {
+      assertAgentRunLifecycleGenerationCurrent(params.lifecycleGeneration!);
+      params.abortSignal?.throwIfAborted();
+      params.assertCurrent?.();
+    };
     const { finalText, payloads } = await prepareCliHandledBeforeAgentReply({
       runParams: params,
       reply: hookResult.reply,
+      assertCurrent,
     });
     const syntheticBackend = resolveCliBackendConfig(params.provider, params.config, {
       agentId: params.agentId,

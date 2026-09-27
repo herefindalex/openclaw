@@ -4,7 +4,6 @@ import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from "vite
 import { createDeferred } from "../../test/helpers/promise.js";
 import { useAutoCleanupTempDirTracker } from "../../test/helpers/temp-dir.js";
 import { getReplyPayloadMetadata, setReplyPayloadMetadata } from "../auto-reply/reply-payload.js";
-import { SILENT_REPLY_TOKEN } from "../auto-reply/tokens.js";
 import { loadTranscriptEvents } from "../config/sessions/session-accessor.js";
 import {
   getAgentEventLifecycleGeneration,
@@ -30,7 +29,7 @@ import {
   createRegisteredBeforeAgentReplyFixture,
   expectClaimedReplyDelivered,
   expectClaimedReplyPersisted,
-  selectClaimedReplyAssistantEvents,
+  registerCliClaimedReplyAuthorityTests,
 } from "./before-agent-reply.test-support.js";
 import { testing as cliBackendsTesting } from "./cli-backends.test-support.js";
 import type { CliOutput } from "./cli-output-contracts.js";
@@ -750,28 +749,13 @@ describe("runCliAgent before_agent_reply seam", () => {
     });
   });
 
-  it("keeps a silent cron hook claim out of the assistant transcript", async () => {
-    const sessionTarget = await createClaimedReplySessionTarget(
-      tempDirs.make("openclaw-cli-before-agent-reply-silent-"),
-      baseRunParams,
-    );
-    hasHooksMock.mockImplementation((hookName) => hookName === "before_agent_reply");
-    runBeforeAgentReplyMock.mockResolvedValue({ handled: true });
-
-    const result = await runCliAgent({
-      ...baseRunParams,
-      ...sessionTarget,
-      trigger: "cron",
-      jobId: "cron-job-123",
-      persistAssistantTranscript: true,
-    });
-
-    expect(executePreparedCliRunMock).not.toHaveBeenCalled();
-    expect(result.payloads?.[0]?.text).toBe(SILENT_REPLY_TOKEN);
-    const assistantMessages = selectClaimedReplyAssistantEvents(
-      await loadTranscriptEvents(sessionTarget),
-    );
-    expect(assistantMessages).toEqual([]);
+  registerCliClaimedReplyAuthorityTests({
+    baseRunParams,
+    hasHooksMock,
+    runBeforeAgentReplyMock,
+    runCliAgent: (params) => runCliAgent(params),
+    makeTempDir: (prefix) => tempDirs.make(prefix),
+    assertNoBackendExecution: () => expect(executePreparedCliRunMock).not.toHaveBeenCalled(),
   });
 
   it.each(CLAIMED_REPLY_MEDIA_CASES)(

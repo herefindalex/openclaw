@@ -1,16 +1,20 @@
 import path from "node:path";
 import { expectDefined } from "@openclaw/normalization-core";
 import { isRecord } from "@openclaw/normalization-core/record-coerce";
-import { expect, type Mock, vi } from "vitest";
+import { expect, it, type Mock, vi } from "vitest";
+import { createDeferred } from "../../test/helpers/promise.js";
 import { getReplyPayloadMetadata, type ReplyPayload } from "../auto-reply/reply-payload.js";
+import { SILENT_REPLY_TOKEN } from "../auto-reply/tokens.js";
 import type { ChannelOutboundAdapter } from "../channels/plugins/types.public.js";
 import { loadTranscriptEvents } from "../config/sessions/session-accessor.js";
 import { upsertSessionEntry } from "../plugin-sdk/session-store-runtime.js";
-import { createHookRunner } from "../plugins/hooks.js";
+import { createHookRunner, type HookRunner } from "../plugins/hooks.js";
 import { createLazyPluginRuntime } from "../plugins/loader-module-runtime.js";
 import { createPluginRegistry } from "../plugins/registry.js";
 import { createPluginRecord } from "../plugins/status.test-helpers.js";
 import { createChannelTestPluginBase } from "../test-utils/channel-plugins.js";
+import type { RunCliAgentParams } from "./cli-runner/types.js";
+import type { EmbeddedAgentRunResult } from "./embedded-agent-runner/types.js";
 
 export async function createClaimedReplySessionTarget(
   root: string,
@@ -29,12 +33,118 @@ export async function createClaimedReplySessionTarget(
   return target;
 }
 
-export function selectClaimedReplyAssistantEvents(
+function selectClaimedReplyAssistantEvents(
   events: Awaited<ReturnType<typeof loadTranscriptEvents>>,
 ) {
   return events.filter(
     (event) => isRecord(event) && isRecord(event.message) && event.message.role === "assistant",
   );
+}
+
+export function registerCliClaimedReplyAuthorityTests(params: {
+  assertNoBackendExecution: () => void;
+  baseRunParams: Omit<RunCliAgentParams, "admittedRunContext"> & {
+    agentId: string;
+    sessionId: string;
+    sessionKey: string;
+  };
+  hasHooksMock: Mock<(hookName: string) => boolean>;
+  makeTempDir: (prefix: string) => string;
+  runBeforeAgentReplyMock: Mock<HookRunner["runBeforeAgentReply"]>;
+  runCliAgent: (
+    runParams: Omit<RunCliAgentParams, "admittedRunContext">,
+  ) => Promise<EmbeddedAgentRunResult>;
+}) {
+  it("keeps a silent cron hook claim out of the assistant transcript", async () => {
+    const sessionTarget = await createClaimedReplySessionTarget(
+      params.makeTempDir("openclaw-cli-before-agent-reply-silent-"),
+      params.baseRunParams,
+    );
+    params.hasHooksMock.mockImplementation((hookName) => hookName === "before_agent_reply");
+    params.runBeforeAgentReplyMock.mockResolvedValue({ handled: true });
+    const result = await params.runCliAgent({
+      ...params.baseRunParams,
+      ...sessionTarget,
+      trigger: "cron",
+      jobId: "cron-job-123",
+      persistAssistantTranscript: true,
+    });
+    params.assertNoBackendExecution();
+    expect(result.payloads?.[0]?.text).toBe(SILENT_REPLY_TOKEN);
+    expect(selectClaimedReplyAssistantEvents(await loadTranscriptEvents(sessionTarget))).toEqual(
+      [],
+    );
+  });
+
+  it("does not persist a claimed reply after cancellation during the hook", async () => {
+    const sessionTarget = await createClaimedReplySessionTarget(
+      params.makeTempDir("openclaw-cli-before-agent-reply-cancelled-"),
+      params.baseRunParams,
+    );
+    const entered = createDeferred();
+    const release = createDeferred();
+    const abort = new AbortController();
+    const failure = new Error("cancelled while the hook was pending");
+    params.hasHooksMock.mockImplementation((hookName) => hookName === "before_agent_reply");
+    params.runBeforeAgentReplyMock.mockImplementation(async () => {
+      entered.resolve();
+      await release.promise;
+      return { handled: true, reply: { text: "late claimed reply" } };
+    });
+    const outcome = params
+      .runCliAgent({
+        ...params.baseRunParams,
+        ...sessionTarget,
+        abortSignal: abort.signal,
+        persistAssistantTranscript: true,
+        trigger: "user",
+      })
+      .catch((error: unknown) => error);
+    await entered.promise;
+    abort.abort(failure);
+    release.resolve();
+    const settled = await outcome;
+    expect(selectClaimedReplyAssistantEvents(await loadTranscriptEvents(sessionTarget))).toEqual(
+      [],
+    );
+    expect(settled).toBe(failure);
+  });
+
+  it("does not persist a claimed reply cancelled during transcript preparation", async () => {
+    const sessionTarget = await createClaimedReplySessionTarget(
+      params.makeTempDir("openclaw-cli-before-agent-reply-write-cancelled-"),
+      params.baseRunParams,
+    );
+    const abort = new AbortController();
+    const failure = new Error("cancelled while transcript write was preparing");
+    let prepared = 0;
+    params.hasHooksMock.mockImplementation((hookName) => hookName === "before_agent_reply");
+    params.runBeforeAgentReplyMock.mockResolvedValue({
+      handled: true,
+      reply: { text: "late claimed reply" },
+    });
+
+    const outcome = await params
+      .runCliAgent({
+        ...params.baseRunParams,
+        ...sessionTarget,
+        abortSignal: abort.signal,
+        persistAssistantTranscript: true,
+        trigger: "user",
+        prepareAssistantTranscriptMessage: (message) => {
+          prepared += 1;
+          abort.abort(failure);
+          return message;
+        },
+      })
+      .catch((error: unknown) => error);
+
+    expect(prepared).toBe(1);
+    expect(selectClaimedReplyAssistantEvents(await loadTranscriptEvents(sessionTarget))).toEqual(
+      [],
+    );
+    expect(outcome).toBe(failure);
+  });
 }
 
 export function createRegisteredBeforeAgentReplyFixture(reply: ReplyPayload) {

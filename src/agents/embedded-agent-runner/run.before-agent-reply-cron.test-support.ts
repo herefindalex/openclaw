@@ -1,6 +1,7 @@
 // Full-entry coverage for before_agent_reply hook handling before embedded attempts.
 import { isRecord } from "@openclaw/normalization-core/record-coerce";
 import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
+import { createDeferred } from "../../../test/helpers/promise.js";
 import { SILENT_REPLY_TOKEN } from "../../auto-reply/tokens.js";
 import type { OpenClawTestState } from "../../test-utils/openclaw-test-state.js";
 import { makeAttemptResult } from "./run.overflow-compaction.fixture.js";
@@ -208,6 +209,88 @@ describe("runEmbeddedAgent before_agent_reply seam", () => {
       const result = await runEmbeddedAgent({ ...session.runParams, trigger: "user" });
       expect(result.payloads?.[0]?.text).toBe(SILENT_REPLY_TOKEN);
       expect(mockedRunEmbeddedAttempt).not.toHaveBeenCalled();
+      const assistantMessages = (
+        await loadTranscriptEvents(session.runParams.sessionTarget)
+      ).filter(
+        (event) =>
+          isRecord(event) &&
+          event.type === "message" &&
+          isRecord(event.message) &&
+          event.message.role === "assistant",
+      );
+      expect(assistantMessages).toEqual([]);
+    } finally {
+      await session.cleanup();
+    }
+  });
+
+  it("does not persist a claimed reply after cancellation during the hook", async () => {
+    const session = await createSharedRunIntegrationSession();
+    const { loadTranscriptEvents } = await import("../../config/sessions/session-accessor.js");
+    const entered = createDeferred();
+    const release = createDeferred();
+    const abort = new AbortController();
+    mockedGlobalHookRunner.hasHooks.mockImplementation(
+      (hookName: string) => hookName === "before_agent_reply",
+    );
+    mockedGlobalHookRunner.runBeforeAgentReply.mockImplementation(async () => {
+      entered.resolve();
+      await release.promise;
+      return { handled: true, reply: { text: "late claimed reply" } };
+    });
+    try {
+      const outcome = runEmbeddedAgent({
+        ...session.runParams,
+        abortSignal: abort.signal,
+        trigger: "user",
+      }).catch((error: unknown) => error);
+      await entered.promise;
+      abort.abort(new Error("cancelled while the hook was pending"));
+      release.resolve();
+      await outcome;
+      const assistantMessages = (
+        await loadTranscriptEvents(session.runParams.sessionTarget)
+      ).filter(
+        (event) =>
+          isRecord(event) &&
+          event.type === "message" &&
+          isRecord(event.message) &&
+          event.message.role === "assistant",
+      );
+      expect(assistantMessages).toEqual([]);
+    } finally {
+      release.resolve();
+      await session.cleanup();
+    }
+  });
+
+  it("does not persist a claimed reply cancelled during transcript preparation", async () => {
+    const session = await createSharedRunIntegrationSession();
+    const { loadTranscriptEvents } = await import("../../config/sessions/session-accessor.js");
+    const abort = new AbortController();
+    let prepared = 0;
+    mockedGlobalHookRunner.hasHooks.mockImplementation(
+      (hookName: string) => hookName === "before_agent_reply",
+    );
+    mockedGlobalHookRunner.runBeforeAgentReply.mockResolvedValue({
+      handled: true,
+      reply: { text: "late claimed reply" },
+    });
+
+    try {
+      const outcome = await runEmbeddedAgent({
+        ...session.runParams,
+        abortSignal: abort.signal,
+        trigger: "user",
+        prepareAssistantTranscriptMessage: (message) => {
+          prepared += 1;
+          abort.abort(new Error("cancelled while transcript write was preparing"));
+          return message;
+        },
+      }).catch((error: unknown) => error);
+
+      expect(prepared).toBe(1);
+      expect(outcome).toBeInstanceOf(Error);
       const assistantMessages = (
         await loadTranscriptEvents(session.runParams.sessionTarget)
       ).filter(

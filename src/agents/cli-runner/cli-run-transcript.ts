@@ -147,6 +147,7 @@ export async function persistApprovedCliUserTurnTranscript(
 
 export async function persistCliAssistantTranscript(params: {
   runParams: RunCliAgentParams;
+  assertCurrentBeforeWrite?: () => void;
   text: string;
   modelId: string;
   usage?: {
@@ -197,6 +198,7 @@ export async function persistCliAssistantTranscript(params: {
       idempotencyKey,
       config: runParams.config,
       beforeMessageWrite: (write) => {
+        params.assertCurrentBeforeWrite?.();
         const message = runAgentHarnessBeforeMessageWriteHook({
           ...write,
           message: projectAgentHarnessTranscriptMessageForDisplay({
@@ -206,6 +208,7 @@ export async function persistCliAssistantTranscript(params: {
           }),
           prepareAssistantTranscriptMessage: runParams.prepareAssistantTranscriptMessage,
         });
+        params.assertCurrentBeforeWrite?.();
         return message
           ? projectAgentHarnessTranscriptMessageForDisplay({
               hidden: false,
@@ -262,7 +265,9 @@ export async function persistCliAssistantTranscript(params: {
 export async function prepareCliHandledBeforeAgentReply(params: {
   runParams: RunCliAgentParams;
   reply?: ReplyPayload;
+  assertCurrent: () => void;
 }): Promise<{ finalText: string; payloads: ReplyPayload[] }> {
+  params.assertCurrent();
   const finalText = params.reply?.text ?? SILENT_REPLY_TOKEN;
   const payloads = buildHandledBeforeAgentReplyPayloads(params.reply);
   if (!params.reply) {
@@ -273,10 +278,12 @@ export async function prepareCliHandledBeforeAgentReply(params: {
   }
   const transcript = await persistCliAssistantTranscript({
     runParams: params.runParams,
+    assertCurrentBeforeWrite: params.assertCurrent,
     text: resolveHandledBeforeAgentReplyTranscriptText(params.reply),
     modelId: params.runParams.model ?? "",
     stopReason: "stop",
   });
+  params.assertCurrent();
   if (transcript.owned) {
     for (const payload of payloads) {
       setReplyPayloadMetadata(payload, {

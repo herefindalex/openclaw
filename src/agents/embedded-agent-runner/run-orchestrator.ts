@@ -507,7 +507,12 @@ async function runEmbeddedAgentInternal(
                   notifyExecutionPhase("runtime_plugins", { provider, model: modelId }),
               });
               if (hookResult?.handled) {
+                const assertCurrent = () => {
+                  throwIfAborted();
+                  assertAgentRunLifecycleGenerationCurrent(lifecycleGeneration);
+                };
                 return await buildEmbeddedHandledBeforeAgentReplyResult({
+                  assertCurrent,
                   agentId: workspaceResolution.agentId,
                   model: modelId,
                   provider,

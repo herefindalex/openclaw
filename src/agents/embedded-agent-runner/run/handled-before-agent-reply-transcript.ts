@@ -16,6 +16,7 @@ import { buildAssistantMessage, buildUsageWithNoCost } from "../../stream-messag
 import type { RunEmbeddedAgentInternalParams } from "./internal-params.js";
 
 type PersistHandledBeforeAgentReplyTranscriptParams = {
+  assertCurrent: () => void;
   agentId?: string;
   config?: OpenClawConfig;
   model: string;
@@ -52,11 +53,15 @@ async function persistHandledBeforeAgentReplyTranscript(
     config: params.config,
     runId: params.runId,
     idempotencyKey,
-    beforeMessageWrite: (write) =>
-      runAgentHarnessBeforeMessageWriteHook({
+    beforeMessageWrite: (write) => {
+      params.assertCurrent();
+      const message = runAgentHarnessBeforeMessageWriteHook({
         ...write,
         prepareAssistantTranscriptMessage: params.prepareAssistantTranscriptMessage,
-      }),
+      });
+      params.assertCurrent();
+      return message;
+    },
     message: buildAssistantMessage({
       model: {
         api: params.provider,
@@ -81,6 +86,7 @@ async function prepareEmbeddedHandledBeforeAgentReply(
   payloads: ReplyPayload[];
   persistenceWarning?: string;
 }> {
+  params.assertCurrent();
   const finalText = params.reply?.text ?? SILENT_REPLY_TOKEN;
   const payloads = buildHandledBeforeAgentReplyPayloads(params.reply);
   if (!params.persist || !params.reply) {
@@ -93,6 +99,7 @@ async function prepareEmbeddedHandledBeforeAgentReply(
     ...params,
     text: resolveHandledBeforeAgentReplyTranscriptText(params.reply),
   });
+  params.assertCurrent();
   if (transcript.ok || transcript.code === "blocked" || transcript.code === "session-rebound") {
     for (const payload of payloads) {
       setReplyPayloadMetadata(payload, {
@@ -121,6 +128,7 @@ type EmbeddedHandledBeforeAgentReplyRunParams = Pick<
 >;
 
 export async function buildEmbeddedHandledBeforeAgentReplyResult(params: {
+  assertCurrent: () => void;
   agentId?: string;
   model: string;
   provider: string;
@@ -133,6 +141,7 @@ export async function buildEmbeddedHandledBeforeAgentReplyResult(params: {
   warn: (message: string) => void;
 }) {
   const handled = await prepareEmbeddedHandledBeforeAgentReply({
+    assertCurrent: params.assertCurrent,
     agentId: params.agentId,
     config: params.run.config,
     model: params.model,
