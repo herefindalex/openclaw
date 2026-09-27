@@ -760,7 +760,8 @@ describe("runCliAgent before_agent_reply seam", () => {
 
   it.each(CLAIMED_REPLY_MEDIA_CASES)(
     "persists registered plugin $name once across CLI claim and routed delivery",
-    async ({ reply, transcript }) => {
+    async (testCase) => {
+      const { reply, transcript } = testCase;
       const sessionTarget = await createClaimedReplySessionTarget(
         tempDirs.make("openclaw-cli-before-agent-reply-"),
         baseRunParams,
@@ -809,7 +810,13 @@ describe("runCliAgent before_agent_reply seam", () => {
           mirror: getReplyPayloadMetadata(payload)?.assistantTranscriptOwned !== true,
         });
         expect(routed.ok).toBe(true);
-        expectClaimedReplyDelivered({ reply, sendText, sendMedia });
+        expectClaimedReplyDelivered({
+          reply,
+          expectedMediaText:
+            "expectedMediaText" in testCase ? testCase.expectedMediaText : undefined,
+          sendText,
+          sendMedia,
+        });
         expect(await loadTranscriptEvents(sessionTarget)).toEqual(beforeDelivery);
       } finally {
         setActivePluginRegistry(previousRegistry ?? createEmptyPluginRegistry());

@@ -1,6 +1,6 @@
 import { AsyncLocalStorage } from "node:async_hooks";
 import type { ReplyPayload } from "../auto-reply/reply-payload.js";
-import { SILENT_REPLY_TOKEN } from "../auto-reply/tokens.js";
+import { isSilentReplyPayloadText, SILENT_REPLY_TOKEN } from "../auto-reply/tokens.js";
 import { resolveMirroredTranscriptText } from "../config/sessions/transcript-mirror.js";
 import { runOncePerAgentRun } from "../infra/agent-events.js";
 import { resolveOutboundMediaUrls } from "../infra/outbound/reply-payload-parts.js";
@@ -45,7 +45,8 @@ export function buildHandledBeforeAgentReplyPayloads(reply?: ReplyPayload): Repl
 export function resolveHandledBeforeAgentReplyTranscriptText(reply?: ReplyPayload): string {
   const mediaUrls = resolveOutboundMediaUrls(reply ?? {});
   if (mediaUrls.length > 0) {
-    return resolveMirroredTranscriptText({ text: reply?.text, mediaUrls }) ?? SILENT_REPLY_TOKEN;
+    const text = isSilentReplyPayloadText(reply?.text) ? undefined : reply?.text;
+    return resolveMirroredTranscriptText({ text, mediaUrls }) ?? SILENT_REPLY_TOKEN;
   }
   return reply?.text ?? SILENT_REPLY_TOKEN;
 }

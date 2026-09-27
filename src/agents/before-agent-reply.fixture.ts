@@ -1,4 +1,5 @@
 import type { ReplyPayload } from "../auto-reply/reply-payload.js";
+import { SILENT_REPLY_TOKEN } from "../auto-reply/tokens.js";
 
 export const CLAIMED_REPLY_MEDIA_CASES = [
   { name: "text", reply: { text: "user turn claimed" }, transcript: "user turn claimed" },
@@ -13,6 +14,12 @@ export const CLAIMED_REPLY_MEDIA_CASES = [
     transcript: "caption\nphoto.png",
   },
   {
+    name: "silent token with media",
+    reply: { text: SILENT_REPLY_TOKEN, mediaUrl: "https://example.com/photo.png" },
+    transcript: "photo.png",
+    expectedMediaText: "",
+  },
+  {
     name: "multiple media",
     reply: {
       text: "caption",
@@ -20,4 +27,9 @@ export const CLAIMED_REPLY_MEDIA_CASES = [
     },
     transcript: "caption\nphoto.png, diagram.png",
   },
-] satisfies Array<{ name: string; reply: ReplyPayload; transcript: string }>;
+] satisfies Array<{
+  name: string;
+  reply: ReplyPayload;
+  transcript: string;
+  expectedMediaText?: string;
+}>;

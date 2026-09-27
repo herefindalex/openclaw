@@ -100,6 +100,11 @@ describe("runEmbeddedAgent before_agent_reply seam", () => {
           expected: "caption\nphoto.png",
         },
         {
+          name: "silent token with media",
+          reply: { text: SILENT_REPLY_TOKEN, mediaUrl: "https://example.com/photo.png" },
+          expected: "photo.png",
+        },
+        {
           name: "multiple media",
           reply: {
             text: "caption",
