@@ -1,14 +1,41 @@
+import path from "node:path";
 import { expectDefined } from "@openclaw/normalization-core";
 import { isRecord } from "@openclaw/normalization-core/record-coerce";
 import { expect, type Mock, vi } from "vitest";
 import { getReplyPayloadMetadata, type ReplyPayload } from "../auto-reply/reply-payload.js";
 import type { ChannelOutboundAdapter } from "../channels/plugins/types.public.js";
 import { loadTranscriptEvents } from "../config/sessions/session-accessor.js";
+import { upsertSessionEntry } from "../plugin-sdk/session-store-runtime.js";
 import { createHookRunner } from "../plugins/hooks.js";
 import { createLazyPluginRuntime } from "../plugins/loader-module-runtime.js";
 import { createPluginRegistry } from "../plugins/registry.js";
 import { createPluginRecord } from "../plugins/status.test-helpers.js";
 import { createChannelTestPluginBase } from "../test-utils/channel-plugins.js";
+
+export async function createClaimedReplySessionTarget(
+  root: string,
+  params: { agentId: string; sessionId: string; sessionKey: string },
+) {
+  const target = {
+    agentId: params.agentId,
+    sessionId: params.sessionId,
+    sessionKey: params.sessionKey,
+    storePath: path.join(root, "agents", params.agentId, "agent", "openclaw-agent.sqlite"),
+  };
+  await upsertSessionEntry({
+    ...target,
+    entry: { sessionId: target.sessionId, updatedAt: Date.now() },
+  });
+  return target;
+}
+
+export function selectClaimedReplyAssistantEvents(
+  events: Awaited<ReturnType<typeof loadTranscriptEvents>>,
+) {
+  return events.filter(
+    (event) => isRecord(event) && isRecord(event.message) && event.message.role === "assistant",
+  );
+}
 
 export function createRegisteredBeforeAgentReplyFixture(reply: ReplyPayload) {
   const builder = createPluginRegistry({
@@ -61,9 +88,7 @@ export async function expectClaimedReplyPersisted(params: {
   const payload = expectDefined(params.result.payloads?.[0], "expected claimed reply payload");
   expect(payload).toMatchObject(params.reply);
   const events = await loadTranscriptEvents(params.sessionTarget);
-  const assistantMessages = events.filter(
-    (event) => isRecord(event) && isRecord(event.message) && event.message.role === "assistant",
-  );
+  const assistantMessages = selectClaimedReplyAssistantEvents(events);
   expect(assistantMessages).toHaveLength(1);
   expect(assistantMessages).toContainEqual(
     expect.objectContaining({

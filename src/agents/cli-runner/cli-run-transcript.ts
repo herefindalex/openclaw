@@ -264,13 +264,19 @@ export async function prepareCliHandledBeforeAgentReply(params: {
   reply?: ReplyPayload;
 }): Promise<{ finalText: string; payloads: ReplyPayload[] }> {
   const finalText = params.reply?.text ?? SILENT_REPLY_TOKEN;
+  const payloads = buildHandledBeforeAgentReplyPayloads(params.reply);
+  if (!params.reply) {
+    for (const payload of payloads) {
+      setReplyPayloadMetadata(payload, { assistantTranscriptOwned: true });
+    }
+    return { finalText, payloads };
+  }
   const transcript = await persistCliAssistantTranscript({
     runParams: params.runParams,
     text: resolveHandledBeforeAgentReplyTranscriptText(params.reply),
     modelId: params.runParams.model ?? "",
     stopReason: "stop",
   });
-  const payloads = buildHandledBeforeAgentReplyPayloads(params.reply);
   if (transcript.owned) {
     for (const payload of payloads) {
       setReplyPayloadMetadata(payload, {

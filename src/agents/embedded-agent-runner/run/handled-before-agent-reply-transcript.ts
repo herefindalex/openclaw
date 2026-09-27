@@ -83,7 +83,7 @@ async function prepareEmbeddedHandledBeforeAgentReply(
 }> {
   const finalText = params.reply?.text ?? SILENT_REPLY_TOKEN;
   const payloads = buildHandledBeforeAgentReplyPayloads(params.reply);
-  if (!params.persist) {
+  if (!params.persist || !params.reply) {
     for (const payload of payloads) {
       setReplyPayloadMetadata(payload, { assistantTranscriptOwned: true });
     }

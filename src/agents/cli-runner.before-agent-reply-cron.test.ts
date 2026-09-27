@@ -1,4 +1,3 @@
-import path from "node:path";
 import { expectDefined } from "@openclaw/normalization-core";
 /** Tests cron before_agent_reply gating at the CLI runner entrypoint. */
 import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
@@ -16,7 +15,6 @@ import {
   resetDiagnosticEventsForTest,
   type DiagnosticEventPayload,
 } from "../infra/diagnostic-events.js";
-import { upsertSessionEntry } from "../plugin-sdk/session-store-runtime.js";
 import type { HookRunner } from "../plugins/hooks.js";
 import { createEmptyPluginRegistry } from "../plugins/registry.js";
 import { getActivePluginRegistry, setActivePluginRegistry } from "../plugins/runtime.js";
@@ -28,9 +26,11 @@ import {
 } from "./agent-bundle-mcp-manager.test-support.js";
 import { CLAIMED_REPLY_MEDIA_CASES } from "./before-agent-reply.fixture.js";
 import {
+  createClaimedReplySessionTarget,
   createRegisteredBeforeAgentReplyFixture,
   expectClaimedReplyDelivered,
   expectClaimedReplyPersisted,
+  selectClaimedReplyAssistantEvents,
 } from "./before-agent-reply.test-support.js";
 import { testing as cliBackendsTesting } from "./cli-backends.test-support.js";
 import type { CliOutput } from "./cli-output-contracts.js";
@@ -750,30 +750,37 @@ describe("runCliAgent before_agent_reply seam", () => {
     });
   });
 
-  it("returns a silent payload when a cron hook claims without a reply body", async () => {
+  it("keeps a silent cron hook claim out of the assistant transcript", async () => {
+    const sessionTarget = await createClaimedReplySessionTarget(
+      tempDirs.make("openclaw-cli-before-agent-reply-silent-"),
+      baseRunParams,
+    );
     hasHooksMock.mockImplementation((hookName) => hookName === "before_agent_reply");
     runBeforeAgentReplyMock.mockResolvedValue({ handled: true });
 
-    const result = await runCliAgent({ ...baseRunParams, trigger: "cron", jobId: "cron-job-123" });
+    const result = await runCliAgent({
+      ...baseRunParams,
+      ...sessionTarget,
+      trigger: "cron",
+      jobId: "cron-job-123",
+      persistAssistantTranscript: true,
+    });
 
     expect(executePreparedCliRunMock).not.toHaveBeenCalled();
     expect(result.payloads?.[0]?.text).toBe(SILENT_REPLY_TOKEN);
+    const assistantMessages = selectClaimedReplyAssistantEvents(
+      await loadTranscriptEvents(sessionTarget),
+    );
+    expect(assistantMessages).toEqual([]);
   });
 
   it.each(CLAIMED_REPLY_MEDIA_CASES)(
     "persists registered plugin $name once across CLI claim and routed delivery",
     async ({ reply, transcript }) => {
-      const root = tempDirs.make("openclaw-cli-before-agent-reply-");
-      const sessionTarget = {
-        agentId: baseRunParams.agentId,
-        sessionId: baseRunParams.sessionId,
-        sessionKey: baseRunParams.sessionKey,
-        storePath: path.join(root, "agents", "main", "agent", "openclaw-agent.sqlite"),
-      };
-      await upsertSessionEntry({
-        ...sessionTarget,
-        entry: { sessionId: sessionTarget.sessionId, updatedAt: Date.now() },
-      });
+      const sessionTarget = await createClaimedReplySessionTarget(
+        tempDirs.make("openclaw-cli-before-agent-reply-"),
+        baseRunParams,
+      );
       const { registry, hookRunner, handler, sendText, sendMedia } =
         createRegisteredBeforeAgentReplyFixture(
           setReplyPayloadMetadata(reply, {

@@ -1,6 +1,7 @@
 // Full-entry coverage for before_agent_reply hook handling before embedded attempts.
 import { isRecord } from "@openclaw/normalization-core/record-coerce";
 import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
+import { SILENT_REPLY_TOKEN } from "../../auto-reply/tokens.js";
 import type { OpenClawTestState } from "../../test-utils/openclaw-test-state.js";
 import { makeAttemptResult } from "./run.overflow-compaction.fixture.js";
 import {
@@ -191,6 +192,32 @@ describe("runEmbeddedAgent before_agent_reply seam", () => {
       expect(mockedGlobalHookRunner.runBeforeAgentReply).toHaveBeenCalledTimes(1);
       expect(mockedRunEmbeddedAttempt).not.toHaveBeenCalled();
       expect(await loadTranscriptEvents(session.runParams.sessionTarget)).toEqual([]);
+    } finally {
+      await session.cleanup();
+    }
+  });
+
+  it("keeps a silent hook claim out of the assistant transcript", async () => {
+    const session = await createSharedRunIntegrationSession();
+    const { loadTranscriptEvents } = await import("../../config/sessions/session-accessor.js");
+    try {
+      mockedGlobalHookRunner.hasHooks.mockImplementation(
+        (hookName: string) => hookName === "before_agent_reply",
+      );
+      mockedGlobalHookRunner.runBeforeAgentReply.mockResolvedValue({ handled: true });
+      const result = await runEmbeddedAgent({ ...session.runParams, trigger: "user" });
+      expect(result.payloads?.[0]?.text).toBe(SILENT_REPLY_TOKEN);
+      expect(mockedRunEmbeddedAttempt).not.toHaveBeenCalled();
+      const assistantMessages = (
+        await loadTranscriptEvents(session.runParams.sessionTarget)
+      ).filter(
+        (event) =>
+          isRecord(event) &&
+          event.type === "message" &&
+          isRecord(event.message) &&
+          event.message.role === "assistant",
+      );
+      expect(assistantMessages).toEqual([]);
     } finally {
       await session.cleanup();
     }
