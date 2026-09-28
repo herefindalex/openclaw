@@ -66,7 +66,18 @@ export const CLAIMED_REPLY_MEDIA_CASES = [
         slack: { blocks: [{ type: "section", text: { type: "plain_text", text: "Hello" } }] },
       },
     },
-    transcript: HEARTBEAT_TOKEN,
+    transcript: null,
+    expectedDeliveryText: "",
+  },
+  {
+    name: "silent token with opaque channel data",
+    reply: {
+      text: SILENT_REPLY_TOKEN,
+      channelData: {
+        slack: { blocks: [{ type: "section", text: { type: "plain_text", text: "Hello" } }] },
+      },
+    },
+    transcript: null,
     expectedDeliveryText: "",
   },
   {
@@ -80,6 +91,6 @@ export const CLAIMED_REPLY_MEDIA_CASES = [
 ] satisfies Array<{
   name: string;
   reply: ReplyPayload;
-  transcript: string;
+  transcript: string | null;
   expectedDeliveryText?: string;
 }>;

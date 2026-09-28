@@ -760,7 +760,7 @@ describe("runCliAgent before_agent_reply seam", () => {
   });
 
   it.each(CLAIMED_REPLY_MEDIA_CASES)(
-    "persists registered plugin $name once across CLI claim and routed delivery",
+    "keeps registered plugin $name history aligned across CLI claim and routed delivery",
     async (testCase) => {
       const { reply, transcript } = testCase;
       const sessionTarget = await createClaimedReplySessionTarget(

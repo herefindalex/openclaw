@@ -197,7 +197,7 @@ export function createRegisteredBeforeAgentReplyFixture(reply: ReplyPayload) {
 export async function expectClaimedReplyPersisted(params: {
   result: { payloads?: ReplyPayload[] };
   reply: ReplyPayload;
-  transcript: string;
+  transcript: string | null;
   sessionTarget: Parameters<typeof loadTranscriptEvents>[0];
   runId: string;
 }): Promise<{
@@ -208,22 +208,32 @@ export async function expectClaimedReplyPersisted(params: {
   expect(payload).toMatchObject(params.reply);
   const events = await loadTranscriptEvents(params.sessionTarget);
   const assistantMessages = selectClaimedReplyAssistantEvents(events);
-  expect(assistantMessages).toHaveLength(1);
-  expect(assistantMessages).toContainEqual(
-    expect.objectContaining({
-      message: expect.objectContaining({
-        role: "assistant",
-        content: expect.arrayContaining([
-          expect.objectContaining({ type: "text", text: params.transcript }),
-        ]),
+  if (params.transcript === null) {
+    expect(assistantMessages).toHaveLength(0);
+  } else {
+    expect(assistantMessages).toHaveLength(1);
+    expect(assistantMessages).toContainEqual(
+      expect.objectContaining({
+        message: expect.objectContaining({
+          role: "assistant",
+          content: expect.arrayContaining([
+            expect.objectContaining({ type: "text", text: params.transcript }),
+          ]),
+        }),
       }),
-    }),
-  );
+    );
+  }
   expect(getReplyPayloadMetadata(payload)).toMatchObject({
     assistantTranscriptOwned: true,
-    assistantTranscriptIdempotencyKey: `cli-assistant:${params.runId}`,
     heartbeatScratchProposal: "preserved plugin metadata",
   });
+  if (params.transcript === null) {
+    expect(getReplyPayloadMetadata(payload)?.assistantTranscriptIdempotencyKey).toBeUndefined();
+  } else {
+    expect(getReplyPayloadMetadata(payload)?.assistantTranscriptIdempotencyKey).toBe(
+      `cli-assistant:${params.runId}`,
+    );
+  }
   return { payload, beforeDelivery: events };
 }
 

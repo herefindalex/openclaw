@@ -11,7 +11,6 @@ import { resolveMirroredTranscriptText } from "../config/sessions/transcript-mir
 import { runOncePerAgentRun } from "../infra/agent-events.js";
 import { resolveOutboundPayloadMirrorText } from "../infra/outbound/payloads.js";
 import { resolveOutboundMediaUrls } from "../infra/outbound/reply-payload-parts.js";
-import { hasReplyChannelData } from "../interactive/payload.js";
 import { resolveGlobalSingleton } from "../shared/global-singleton.js";
 import { getGlobalHookRunner } from "./hook-runner-global.js";
 import type {
@@ -68,14 +67,10 @@ export function resolveHandledBeforeAgentReplyTranscriptText(reply?: ReplyPayloa
     ...reply,
     text: heartbeat?.text ?? text,
   });
-  if (heartbeat?.shouldSkip && mediaUrls.length === 0 && !mirroredText) {
-    // Opaque channel data can still be delivered, but has no generic text mirror.
-    return hasReplyChannelData(reply?.channelData) ? (text ?? SILENT_REPLY_TOKEN) : null;
-  }
   if (mediaUrls.length > 0) {
     return resolveMirroredTranscriptText({ text: mirroredText, mediaUrls }) ?? SILENT_REPLY_TOKEN;
   }
-  return (mirroredText || (heartbeat ? heartbeat.text : text)) ?? SILENT_REPLY_TOKEN;
+  return mirroredText || (heartbeat ? heartbeat.text : text) || null;
 }
 
 /** Runs the reply claim hook once for one admitted turn, across model fallbacks. */

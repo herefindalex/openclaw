@@ -138,6 +138,26 @@ describe("runEmbeddedAgent before_agent_reply seam", () => {
           expected: "📍 48.858844, 2.294351",
         },
         {
+          name: "heartbeat token with opaque channel data",
+          reply: {
+            text: HEARTBEAT_TOKEN,
+            channelData: {
+              slack: { blocks: [{ type: "section", text: { type: "plain_text", text: "Hello" } }] },
+            },
+          },
+          expected: null,
+        },
+        {
+          name: "silent token with opaque channel data",
+          reply: {
+            text: SILENT_REPLY_TOKEN,
+            channelData: {
+              slack: { blocks: [{ type: "section", text: { type: "plain_text", text: "Hello" } }] },
+            },
+          },
+          expected: null,
+        },
+        {
           name: "multiple media",
           reply: {
             text: "caption",
@@ -152,7 +172,7 @@ describe("runEmbeddedAgent before_agent_reply seam", () => {
         }),
       ),
     ),
-  )("preserves transcript persistence for a hook-claimed $name", async (testCase) => {
+  )("keeps hook-claimed $name transcript ownership", async (testCase) => {
     const session = await createSharedRunIntegrationSession();
     const { loadTranscriptEvents } = await import("../../config/sessions/session-accessor.js");
     const { getReplyPayloadMetadata, setReplyPayloadMetadata } =
@@ -184,7 +204,7 @@ describe("runEmbeddedAgent before_agent_reply seam", () => {
         assistantTranscriptOwned: true,
         blockSourceText: "plugin-owned source",
       });
-      if (testCase.persists) {
+      if (testCase.persists && testCase.expected !== null) {
         expect(
           transcript.filter(
             (event) =>
