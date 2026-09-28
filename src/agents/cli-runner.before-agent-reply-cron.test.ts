@@ -813,8 +813,8 @@ describe("runCliAgent before_agent_reply seam", () => {
         expect(routed.ok).toBe(true);
         expectClaimedReplyDelivered({
           reply,
-          expectedMediaText:
-            "expectedMediaText" in testCase ? testCase.expectedMediaText : undefined,
+          expectedDeliveryText:
+            "expectedDeliveryText" in testCase ? testCase.expectedDeliveryText : undefined,
           sendText,
           sendMedia,
         });

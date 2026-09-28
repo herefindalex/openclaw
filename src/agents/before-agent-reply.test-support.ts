@@ -223,7 +223,7 @@ export async function expectClaimedReplyPersisted(params: {
 
 export function expectClaimedReplyDelivered(params: {
   reply: ReplyPayload;
-  expectedMediaText?: string;
+  expectedDeliveryText?: string;
   sendText: Mock<NonNullable<ChannelOutboundAdapter["sendText"]>>;
   sendMedia: Mock<NonNullable<ChannelOutboundAdapter["sendMedia"]>>;
 }): void {
@@ -237,13 +237,13 @@ export function expectClaimedReplyDelivered(params: {
     expect(params.sendMedia).toHaveBeenCalledTimes(mediaUrls.length);
     expect(params.sendMedia.mock.calls.map(([context]) => context.mediaUrl)).toEqual(mediaUrls);
     expect(params.sendMedia.mock.calls[0]?.[0].text).toBe(
-      params.expectedMediaText ?? params.reply.text ?? "",
+      params.expectedDeliveryText ?? params.reply.text ?? "",
     );
     return;
   }
   expect(params.sendMedia).not.toHaveBeenCalled();
   expect(params.sendText).toHaveBeenCalledTimes(1);
   expect(params.sendText).toHaveBeenCalledWith(
-    expect.objectContaining({ text: params.reply.text }),
+    expect.objectContaining({ text: params.expectedDeliveryText ?? params.reply.text }),
   );
 }

@@ -17,7 +17,19 @@ export const CLAIMED_REPLY_MEDIA_CASES = [
     name: "silent token with media",
     reply: { text: SILENT_REPLY_TOKEN, mediaUrl: "https://example.com/photo.png" },
     transcript: "photo.png",
-    expectedMediaText: "",
+    expectedDeliveryText: "",
+  },
+  {
+    name: "mixed silent token text",
+    reply: { text: `Hello ${SILENT_REPLY_TOKEN}` },
+    transcript: "Hello",
+    expectedDeliveryText: "Hello",
+  },
+  {
+    name: "mixed silent token with media",
+    reply: { text: `Hello ${SILENT_REPLY_TOKEN}`, mediaUrl: "https://example.com/photo.png" },
+    transcript: "Hello\nphoto.png",
+    expectedDeliveryText: "Hello",
   },
   {
     name: "multiple media",
@@ -31,5 +43,5 @@ export const CLAIMED_REPLY_MEDIA_CASES = [
   name: string;
   reply: ReplyPayload;
   transcript: string;
-  expectedMediaText?: string;
+  expectedDeliveryText?: string;
 }>;

@@ -1,6 +1,10 @@
 import { AsyncLocalStorage } from "node:async_hooks";
-import type { ReplyPayload } from "../auto-reply/reply-payload.js";
-import { isSilentReplyPayloadText, SILENT_REPLY_TOKEN } from "../auto-reply/tokens.js";
+import { getReplyPayloadMetadata, type ReplyPayload } from "../auto-reply/reply-payload.js";
+import {
+  isSilentReplyPayloadText,
+  SILENT_REPLY_TOKEN,
+  stripMixedSilentReplyTokens,
+} from "../auto-reply/tokens.js";
 import { resolveMirroredTranscriptText } from "../config/sessions/transcript-mirror.js";
 import { runOncePerAgentRun } from "../infra/agent-events.js";
 import { resolveOutboundMediaUrls } from "../infra/outbound/reply-payload-parts.js";
@@ -44,11 +48,17 @@ export function buildHandledBeforeAgentReplyPayloads(reply?: ReplyPayload): Repl
 /** Preserve the routed-delivery media mirror before claiming transcript ownership. */
 export function resolveHandledBeforeAgentReplyTranscriptText(reply?: ReplyPayload): string {
   const mediaUrls = resolveOutboundMediaUrls(reply ?? {});
+  const rawText = reply?.text;
+  const text =
+    reply && rawText && getReplyPayloadMetadata(reply)?.heartbeatReply !== true
+      ? isSilentReplyPayloadText(rawText)
+        ? undefined
+        : stripMixedSilentReplyTokens(rawText)
+      : rawText;
   if (mediaUrls.length > 0) {
-    const text = isSilentReplyPayloadText(reply?.text) ? undefined : reply?.text;
     return resolveMirroredTranscriptText({ text, mediaUrls }) ?? SILENT_REPLY_TOKEN;
   }
-  return reply?.text ?? SILENT_REPLY_TOKEN;
+  return text ?? SILENT_REPLY_TOKEN;
 }
 
 /** Runs the reply claim hook once for one admitted turn, across model fallbacks. */
