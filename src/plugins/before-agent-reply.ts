@@ -65,7 +65,7 @@ export function resolveHandledBeforeAgentReplyTranscriptText(reply?: ReplyPayloa
       ? stripHeartbeatToken(text, { mode: "message" })
       : null;
   const mirroredText = resolveOutboundPayloadMirrorText({
-    ...(reply ?? {}),
+    ...reply,
     text: heartbeat?.text ?? text,
   });
   if (heartbeat?.shouldSkip && mediaUrls.length === 0 && !mirroredText) {
