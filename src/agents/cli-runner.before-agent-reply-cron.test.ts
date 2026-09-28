@@ -767,7 +767,7 @@ describe("runCliAgent before_agent_reply seam", () => {
         tempDirs.make("openclaw-cli-before-agent-reply-"),
         baseRunParams,
       );
-      const { registry, hookRunner, handler, sendText, sendMedia } =
+      const { registry, hookRunner, handler, sendText, sendMedia, sendPayload } =
         createRegisteredBeforeAgentReplyFixture(
           setReplyPayloadMetadata(reply, {
             heartbeatScratchProposal: "preserved plugin metadata",
@@ -817,6 +817,7 @@ describe("runCliAgent before_agent_reply seam", () => {
             "expectedDeliveryText" in testCase ? testCase.expectedDeliveryText : undefined,
           sendText,
           sendMedia,
+          sendPayload,
         });
         expect(await loadTranscriptEvents(sessionTarget)).toEqual(beforeDelivery);
       } finally {

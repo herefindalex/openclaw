@@ -93,7 +93,13 @@ async function prepareEmbeddedHandledBeforeAgentReply(
   params.assertCurrent();
   const finalText = params.reply?.text ?? SILENT_REPLY_TOKEN;
   const payloads = buildHandledBeforeAgentReplyPayloads(params.reply);
-  if (!params.persist || !params.reply || isExplicitlySilentReplyPayload(params.reply)) {
+  const transcriptText = resolveHandledBeforeAgentReplyTranscriptText(params.reply);
+  if (
+    !params.persist ||
+    !params.reply ||
+    isExplicitlySilentReplyPayload(params.reply) ||
+    transcriptText === null
+  ) {
     for (const payload of payloads) {
       setReplyPayloadMetadata(payload, { assistantTranscriptOwned: true });
     }
@@ -101,7 +107,7 @@ async function prepareEmbeddedHandledBeforeAgentReply(
   }
   const transcript = await persistHandledBeforeAgentReplyTranscript({
     ...params,
-    text: resolveHandledBeforeAgentReplyTranscriptText(params.reply),
+    text: transcriptText,
   });
   params.assertCurrent();
   if (transcript.ok || transcript.code === "blocked" || transcript.code === "session-rebound") {

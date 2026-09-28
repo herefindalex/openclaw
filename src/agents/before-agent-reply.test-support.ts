@@ -4,7 +4,7 @@ import { isRecord } from "@openclaw/normalization-core/record-coerce";
 import { expect, it, type Mock, vi } from "vitest";
 import { createDeferred } from "../../test/helpers/promise.js";
 import { getReplyPayloadMetadata, type ReplyPayload } from "../auto-reply/reply-payload.js";
-import { SILENT_REPLY_TOKEN } from "../auto-reply/tokens.js";
+import { HEARTBEAT_TOKEN, SILENT_REPLY_TOKEN } from "../auto-reply/tokens.js";
 import type { ChannelOutboundAdapter } from "../channels/plugins/types.public.js";
 import { loadTranscriptEvents } from "../config/sessions/session-accessor.js";
 import { upsertSessionEntry } from "../plugin-sdk/session-store-runtime.js";
@@ -58,6 +58,7 @@ export function registerCliClaimedReplyAuthorityTests(params: {
   it.each([
     { name: "absent reply", reply: undefined },
     { name: "explicit silent reply", reply: { text: SILENT_REPLY_TOKEN } },
+    { name: "heartbeat acknowledgment", reply: { text: HEARTBEAT_TOKEN } },
   ])("keeps a $name cron hook claim out of the assistant transcript", async ({ reply }) => {
     const sessionTarget = await createClaimedReplySessionTarget(
       params.makeTempDir("openclaw-cli-before-agent-reply-silent-"),
@@ -73,7 +74,7 @@ export function registerCliClaimedReplyAuthorityTests(params: {
       persistAssistantTranscript: true,
     });
     params.assertNoBackendExecution();
-    expect(result.payloads?.[0]?.text).toBe(SILENT_REPLY_TOKEN);
+    expect(result.payloads?.[0]?.text).toBe(reply?.text ?? SILENT_REPLY_TOKEN);
     expect(selectClaimedReplyAssistantEvents(await loadTranscriptEvents(sessionTarget))).toEqual(
       [],
     );
@@ -169,6 +170,10 @@ export function createRegisteredBeforeAgentReplyFixture(reply: ReplyPayload) {
     channel: "slack",
     messageId: "claimed-media-delivered",
   }));
+  const sendPayload = vi.fn<NonNullable<ChannelOutboundAdapter["sendPayload"]>>(async () => ({
+    channel: "slack",
+    messageId: "claimed-payload-delivered",
+  }));
   api.registerChannel({
     plugin: {
       ...createChannelTestPluginBase({
@@ -176,7 +181,7 @@ export function createRegisteredBeforeAgentReplyFixture(reply: ReplyPayload) {
         label: "Slack",
         config: { listAccountIds: () => [], resolveAccount: () => ({}) },
       }),
-      outbound: { deliveryMode: "direct", sendText, sendMedia },
+      outbound: { deliveryMode: "direct", sendText, sendMedia, sendPayload },
     },
   });
   return {
@@ -185,6 +190,7 @@ export function createRegisteredBeforeAgentReplyFixture(reply: ReplyPayload) {
     handler,
     sendText,
     sendMedia,
+    sendPayload,
   };
 }
 
@@ -226,12 +232,28 @@ export function expectClaimedReplyDelivered(params: {
   expectedDeliveryText?: string;
   sendText: Mock<NonNullable<ChannelOutboundAdapter["sendText"]>>;
   sendMedia: Mock<NonNullable<ChannelOutboundAdapter["sendMedia"]>>;
+  sendPayload: Mock<NonNullable<ChannelOutboundAdapter["sendPayload"]>>;
 }): void {
   const mediaUrls = params.reply.mediaUrls?.length
     ? params.reply.mediaUrls
     : params.reply.mediaUrl
       ? [params.reply.mediaUrl]
       : [];
+  if (params.reply.location || params.reply.channelData) {
+    expect(params.sendText).not.toHaveBeenCalled();
+    expect(params.sendMedia).not.toHaveBeenCalled();
+    expect(params.sendPayload).toHaveBeenCalledExactlyOnceWith(
+      expect.objectContaining({
+        payload: expect.objectContaining(
+          params.reply.location
+            ? { location: params.reply.location }
+            : { channelData: params.reply.channelData },
+        ),
+      }),
+    );
+    return;
+  }
+  expect(params.sendPayload).not.toHaveBeenCalled();
   if (mediaUrls.length > 0) {
     expect(params.sendText).not.toHaveBeenCalled();
     expect(params.sendMedia).toHaveBeenCalledTimes(mediaUrls.length);

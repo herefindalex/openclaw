@@ -251,7 +251,8 @@ export async function prepareCliHandledBeforeAgentReply(params: {
   params.assertCurrent();
   const finalText = params.reply?.text ?? SILENT_REPLY_TOKEN;
   const payloads = buildHandledBeforeAgentReplyPayloads(params.reply);
-  if (!params.reply || isExplicitlySilentReplyPayload(params.reply)) {
+  const transcriptText = resolveHandledBeforeAgentReplyTranscriptText(params.reply);
+  if (!params.reply || isExplicitlySilentReplyPayload(params.reply) || transcriptText === null) {
     for (const payload of payloads) {
       setReplyPayloadMetadata(payload, { assistantTranscriptOwned: true });
     }
@@ -260,7 +261,7 @@ export async function prepareCliHandledBeforeAgentReply(params: {
   const transcript = await persistCliAssistantTranscript({
     runParams: params.runParams,
     assertCurrentBeforeWrite: params.assertCurrent,
-    text: resolveHandledBeforeAgentReplyTranscriptText(params.reply),
+    text: transcriptText,
     modelId: params.runParams.model ?? "",
     stopReason: "stop",
   });

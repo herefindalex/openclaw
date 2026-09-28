@@ -2,7 +2,7 @@
 import { isRecord } from "@openclaw/normalization-core/record-coerce";
 import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
 import { createDeferred } from "../../../test/helpers/promise.js";
-import { SILENT_REPLY_TOKEN } from "../../auto-reply/tokens.js";
+import { HEARTBEAT_TOKEN, SILENT_REPLY_TOKEN } from "../../auto-reply/tokens.js";
 import type { OpenClawTestState } from "../../test-utils/openclaw-test-state.js";
 import { makeAttemptResult } from "./run.overflow-compaction.fixture.js";
 import {
@@ -115,6 +115,29 @@ describe("runEmbeddedAgent before_agent_reply seam", () => {
           expected: "Hello\nphoto.png",
         },
         {
+          name: "mixed heartbeat token text",
+          reply: { text: `Hello ${HEARTBEAT_TOKEN}` },
+          expected: "Hello",
+        },
+        {
+          name: "mixed heartbeat token media",
+          reply: { text: `Hello ${HEARTBEAT_TOKEN}`, mediaUrl: "https://example.com/photo.png" },
+          expected: "Hello\nphoto.png",
+        },
+        {
+          name: "heartbeat token media",
+          reply: { text: HEARTBEAT_TOKEN, mediaUrl: "https://example.com/photo.png" },
+          expected: "photo.png",
+        },
+        {
+          name: "heartbeat token location",
+          reply: {
+            text: HEARTBEAT_TOKEN,
+            location: { latitude: 48.858844, longitude: 2.294351 },
+          },
+          expected: "📍 48.858844, 2.294351",
+        },
+        {
           name: "multiple media",
           reply: {
             text: "caption",
@@ -216,6 +239,7 @@ describe("runEmbeddedAgent before_agent_reply seam", () => {
   it.each([
     { name: "absent reply", reply: undefined },
     { name: "explicit silent reply", reply: { text: SILENT_REPLY_TOKEN } },
+    { name: "heartbeat acknowledgment", reply: { text: HEARTBEAT_TOKEN } },
   ])("keeps a $name hook claim out of the assistant transcript", async ({ reply }) => {
     const session = await createSharedRunIntegrationSession();
     const { loadTranscriptEvents } = await import("../../config/sessions/session-accessor.js");
@@ -225,7 +249,7 @@ describe("runEmbeddedAgent before_agent_reply seam", () => {
       );
       mockedGlobalHookRunner.runBeforeAgentReply.mockResolvedValue({ handled: true, reply });
       const result = await runEmbeddedAgent({ ...session.runParams, trigger: "user" });
-      expect(result.payloads?.[0]?.text).toBe(SILENT_REPLY_TOKEN);
+      expect(result.payloads?.[0]?.text).toBe(reply?.text ?? SILENT_REPLY_TOKEN);
       expect(mockedRunEmbeddedAttempt).not.toHaveBeenCalled();
       const assistantMessages = (
         await loadTranscriptEvents(session.runParams.sessionTarget)

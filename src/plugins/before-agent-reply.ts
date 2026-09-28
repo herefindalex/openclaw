@@ -1,13 +1,17 @@
 import { AsyncLocalStorage } from "node:async_hooks";
+import { stripHeartbeatToken } from "../auto-reply/heartbeat.js";
 import { getReplyPayloadMetadata, type ReplyPayload } from "../auto-reply/reply-payload.js";
 import {
+  HEARTBEAT_TOKEN,
   isSilentReplyPayloadText,
   SILENT_REPLY_TOKEN,
   stripMixedSilentReplyTokens,
 } from "../auto-reply/tokens.js";
 import { resolveMirroredTranscriptText } from "../config/sessions/transcript-mirror.js";
 import { runOncePerAgentRun } from "../infra/agent-events.js";
+import { resolveOutboundPayloadMirrorText } from "../infra/outbound/payloads.js";
 import { resolveOutboundMediaUrls } from "../infra/outbound/reply-payload-parts.js";
+import { hasReplyChannelData } from "../interactive/payload.js";
 import { resolveGlobalSingleton } from "../shared/global-singleton.js";
 import { getGlobalHookRunner } from "./hook-runner-global.js";
 import type {
@@ -45,20 +49,33 @@ export function buildHandledBeforeAgentReplyPayloads(reply?: ReplyPayload): Repl
   return [reply ?? { text: SILENT_REPLY_TOKEN }];
 }
 
-/** Preserve the routed-delivery media mirror before claiming transcript ownership. */
-export function resolveHandledBeforeAgentReplyTranscriptText(reply?: ReplyPayload): string {
+/** Preserve the routed-delivery content mirror before claiming transcript ownership. */
+export function resolveHandledBeforeAgentReplyTranscriptText(reply?: ReplyPayload): string | null {
   const mediaUrls = resolveOutboundMediaUrls(reply ?? {});
   const rawText = reply?.text;
+  const heartbeatReply = reply && getReplyPayloadMetadata(reply)?.heartbeatReply === true;
   const text =
-    reply && rawText && getReplyPayloadMetadata(reply)?.heartbeatReply !== true
+    reply && rawText && !heartbeatReply
       ? isSilentReplyPayloadText(rawText)
         ? undefined
         : stripMixedSilentReplyTokens(rawText)
       : rawText;
-  if (mediaUrls.length > 0) {
-    return resolveMirroredTranscriptText({ text, mediaUrls }) ?? SILENT_REPLY_TOKEN;
+  const heartbeat =
+    text?.includes(HEARTBEAT_TOKEN) && !heartbeatReply
+      ? stripHeartbeatToken(text, { mode: "message" })
+      : null;
+  const mirroredText = resolveOutboundPayloadMirrorText({
+    ...(reply ?? {}),
+    text: heartbeat?.text ?? text,
+  });
+  if (heartbeat?.shouldSkip && mediaUrls.length === 0 && !mirroredText) {
+    // Opaque channel data can still be delivered, but has no generic text mirror.
+    return hasReplyChannelData(reply?.channelData) ? (text ?? SILENT_REPLY_TOKEN) : null;
   }
-  return text ?? SILENT_REPLY_TOKEN;
+  if (mediaUrls.length > 0) {
+    return resolveMirroredTranscriptText({ text: mirroredText, mediaUrls }) ?? SILENT_REPLY_TOKEN;
+  }
+  return (mirroredText || (heartbeat ? heartbeat.text : text)) ?? SILENT_REPLY_TOKEN;
 }
 
 /** Runs the reply claim hook once for one admitted turn, across model fallbacks. */
