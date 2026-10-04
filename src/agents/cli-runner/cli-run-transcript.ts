@@ -180,6 +180,7 @@ export async function persistCliAssistantTranscript(params: {
       idempotencyKey,
       runId: runParams.runId,
       config: runParams.config,
+      assertCurrent: params.assertCurrentBeforeWrite,
       beforeMessageWrite: (write) => {
         params.assertCurrentBeforeWrite?.();
         const message = runAgentHarnessBeforeMessageWriteHook({

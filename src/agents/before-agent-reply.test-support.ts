@@ -114,41 +114,48 @@ export function registerCliClaimedReplyAuthorityTests(params: {
     expect(settled).toBe(failure);
   });
 
-  it("does not persist a claimed reply cancelled during transcript preparation", async () => {
-    const sessionTarget = await createClaimedReplySessionTarget(
-      params.makeTempDir("openclaw-cli-before-agent-reply-write-cancelled-"),
-      params.baseRunParams,
-    );
-    const abort = new AbortController();
-    const failure = new Error("cancelled while transcript write was preparing");
-    let prepared = 0;
-    params.hasHooksMock.mockImplementation((hookName) => hookName === "before_agent_reply");
-    params.runBeforeAgentReplyMock.mockResolvedValue({
-      handled: true,
-      reply: { text: "late claimed reply" },
-    });
+  it.each(["during", "after"] as const)(
+    "does not persist a claimed reply cancelled %s transcript preparation",
+    async (cancellationTiming) => {
+      const sessionTarget = await createClaimedReplySessionTarget(
+        params.makeTempDir("openclaw-cli-before-agent-reply-write-cancelled-"),
+        params.baseRunParams,
+      );
+      const abort = new AbortController();
+      const failure = new Error("cancelled while transcript write was preparing");
+      let prepared = 0;
+      params.hasHooksMock.mockImplementation((hookName) => hookName === "before_agent_reply");
+      params.runBeforeAgentReplyMock.mockResolvedValue({
+        handled: true,
+        reply: { text: "late claimed reply" },
+      });
 
-    const outcome = await params
-      .runCliAgent({
-        ...params.baseRunParams,
-        ...sessionTarget,
-        abortSignal: abort.signal,
-        persistAssistantTranscript: true,
-        trigger: "user",
-        prepareAssistantTranscriptMessage: (message) => {
-          prepared += 1;
-          abort.abort(failure);
-          return message;
-        },
-      })
-      .catch((error: unknown) => error);
+      const outcome = await params
+        .runCliAgent({
+          ...params.baseRunParams,
+          ...sessionTarget,
+          abortSignal: abort.signal,
+          persistAssistantTranscript: true,
+          trigger: "user",
+          prepareAssistantTranscriptMessage: (message) => {
+            prepared += 1;
+            if (cancellationTiming === "during") {
+              abort.abort(failure);
+            } else {
+              queueMicrotask(() => abort.abort(failure));
+            }
+            return message;
+          },
+        })
+        .catch((error: unknown) => error);
 
-    expect(prepared).toBe(1);
-    expect(selectClaimedReplyAssistantEvents(await loadTranscriptEvents(sessionTarget))).toEqual(
-      [],
-    );
-    expect(outcome).toBe(failure);
-  });
+      expect(prepared).toBe(1);
+      expect(selectClaimedReplyAssistantEvents(await loadTranscriptEvents(sessionTarget))).toEqual(
+        [],
+      );
+      expect(outcome).toBe(failure);
+    },
+  );
 }
 
 export function createRegisteredBeforeAgentReplyFixture(reply: ReplyPayload) {

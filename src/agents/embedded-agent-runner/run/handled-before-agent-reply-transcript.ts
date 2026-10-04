@@ -57,6 +57,7 @@ async function persistHandledBeforeAgentReplyTranscript(
     config: params.config,
     runId: params.runId,
     idempotencyKey,
+    assertCurrent: params.assertCurrent,
     beforeMessageWrite: (write) => {
       params.assertCurrent();
       const message = runAgentHarnessBeforeMessageWriteHook({

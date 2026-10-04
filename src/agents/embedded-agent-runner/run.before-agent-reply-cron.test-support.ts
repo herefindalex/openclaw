@@ -331,47 +331,55 @@ describe("runEmbeddedAgent before_agent_reply seam", () => {
     }
   });
 
-  it("does not persist a claimed reply cancelled during transcript preparation", async () => {
-    const session = await createSharedRunIntegrationSession();
-    const { loadTranscriptEvents } = await import("../../config/sessions/session-accessor.js");
-    const abort = new AbortController();
-    let prepared = 0;
-    mockedGlobalHookRunner.hasHooks.mockImplementation(
-      (hookName: string) => hookName === "before_agent_reply",
-    );
-    mockedGlobalHookRunner.runBeforeAgentReply.mockResolvedValue({
-      handled: true,
-      reply: { text: "late claimed reply" },
-    });
-
-    try {
-      const outcome = await runEmbeddedAgent({
-        ...session.runParams,
-        abortSignal: abort.signal,
-        trigger: "user",
-        prepareAssistantTranscriptMessage: (message) => {
-          prepared += 1;
-          abort.abort(new Error("cancelled while transcript write was preparing"));
-          return message;
-        },
-      }).catch((error: unknown) => error);
-
-      expect(prepared).toBe(1);
-      expect(outcome).toBeInstanceOf(Error);
-      const assistantMessages = (
-        await loadTranscriptEvents(session.runParams.sessionTarget)
-      ).filter(
-        (event) =>
-          isRecord(event) &&
-          event.type === "message" &&
-          isRecord(event.message) &&
-          event.message.role === "assistant",
+  it.each(["during", "after"] as const)(
+    "does not persist a claimed reply cancelled %s transcript preparation",
+    async (cancellationTiming) => {
+      const session = await createSharedRunIntegrationSession();
+      const { loadTranscriptEvents } = await import("../../config/sessions/session-accessor.js");
+      const abort = new AbortController();
+      let prepared = 0;
+      mockedGlobalHookRunner.hasHooks.mockImplementation(
+        (hookName: string) => hookName === "before_agent_reply",
       );
-      expect(assistantMessages).toEqual([]);
-    } finally {
-      await session.cleanup();
-    }
-  });
+      mockedGlobalHookRunner.runBeforeAgentReply.mockResolvedValue({
+        handled: true,
+        reply: { text: "late claimed reply" },
+      });
+
+      try {
+        const outcome = await runEmbeddedAgent({
+          ...session.runParams,
+          abortSignal: abort.signal,
+          trigger: "user",
+          prepareAssistantTranscriptMessage: (message) => {
+            prepared += 1;
+            const failure = new Error("cancelled while transcript write was preparing");
+            if (cancellationTiming === "during") {
+              abort.abort(failure);
+            } else {
+              queueMicrotask(() => abort.abort(failure));
+            }
+            return message;
+          },
+        }).catch((error: unknown) => error);
+
+        expect(prepared).toBe(1);
+        expect(outcome).toBeInstanceOf(Error);
+        const assistantMessages = (
+          await loadTranscriptEvents(session.runParams.sessionTarget)
+        ).filter(
+          (event) =>
+            isRecord(event) &&
+            event.type === "message" &&
+            isRecord(event.message) &&
+            event.message.role === "assistant",
+        );
+        expect(assistantMessages).toEqual([]);
+      } finally {
+        await session.cleanup();
+      }
+    },
+  );
 
   it("lets before_agent_reply claim cron runs before the embedded attempt starts", async () => {
     // Cron hooks can fully handle maintenance prompts before the model is
